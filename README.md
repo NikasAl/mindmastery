@@ -33,13 +33,11 @@ python3 -m venv venv
 source venv/bin/activate  # Linux/Mac
 # venv\Scripts\activate   # Windows
 
-# Установить зависимости
+# Установить пакет
 pip install -e .
 ```
 
 ## Запуск
-
-### Способ 1: Через установленную команду (после pip install -e .)
 
 ```bash
 # Демо-режим (без API ключа)
@@ -50,38 +48,28 @@ export OPENROUTER_API_KEY='your-key-from-openrouter.ai'
 mindmastery
 ```
 
-### Способ 2: Напрямую через Python
-
-```bash
-# Демо-режим
-MENTAL_MASTERY_DEMO=1 python mindmastery.py
-
-# С OpenRouter API
-export OPENROUTER_API_KEY='your-key-from-openrouter.ai'
-python mindmastery.py
-```
-
 Получить API ключ: https://openrouter.ai/keys
 
 ## Структура проекта
 
 ```
 mindmastery/
-├── mindmastery.py        # Точка входа
-├── cli.py                # CLI интерфейс (Rich UI)
-├── demo.py               # Демо-режим с примерами
-├── core/
-│   └── decomposer.py     # Ядро декомпозиции задач
-├── llm/
-│   ├── client.py         # OpenRouter клиент
-│   └── prompts.py        # Системные промпты
-├── models/
-│   └── schemas.py        # Pydantic модели
-├── visualization/
-│   └── renderer.py       # Markdown + LaTeX рендерер
-├── storage/
-│   └── progress.py       # Хранение прогресса
-├── pyproject.toml        # Python зависимости
+├── src/mindmastery/
+│   ├── __init__.py
+│   ├── cli.py              # CLI интерфейс (Rich UI)
+│   ├── demo.py             # Демо-режим с примерами
+│   ├── core/
+│   │   └── decomposer.py   # Ядро декомпозиции задач
+│   ├── llm/
+│   │   ├── client.py       # OpenRouter клиент
+│   │   └── prompts.py      # Системные промпты
+│   ├── models/
+│   │   └── schemas.py      # Pydantic модели
+│   ├── visualization/
+│   │   └── renderer.py     # Markdown + LaTeX рендерер
+│   └── storage/
+│       └── progress.py     # Хранение прогресса
+├── pyproject.toml          # Python зависимости
 └── README.md
 ```
 
@@ -101,24 +89,8 @@ mindmastery/
 ### 1. Дробное выражение (Сканави)
 $$\frac{(7 - 6,35) : 6,5 + 9,9}{\left(1,2 : 36 + 1,2 : 0,25 - 1\frac{5}{16}\right) : \frac{169}{24}}$$
 
-**Выявленные навыки:**
-1. Вычитание десятичных дробей (difficulty: 2)
-2. Паттерн: деление на число ×10 (difficulty: 3)
-3. Паттерн: деление на 0.25 = ×4 (difficulty: 3)
-4. Перевод смешанного числа (difficulty: 3)
-5. Приведение к общему знаменателю (difficulty: 5)
-6. Working Memory: 3 слота (difficulty: 4)
-7. Деление дробей (difficulty: 3)
-8. Финальная сборка (difficulty: 5)
-
 ### 2. Текстовая задача
 "Половина — треть некоторого числа. Какое это число?"
-
-**Выявленные навыки:**
-1. Перевод текста → уравнение (STRATEGIC)
-2. Мысленный холст (VISUALIZATION)
-3. Решение дробного уравнения (COMPUTATIONAL)
-4. Проверка ответа (STRATEGIC)
 
 ## Уровни упражнений
 
@@ -139,15 +111,6 @@ $$\frac{(7 - 6,35) : 6,5 + 9,9}{\left(1,2 : 36 + 1,2 : 0,25 - 1\frac{5}{16}\righ
 # Откройте эту папку в Obsidian для просмотра
 # LaTeX формулы будут рендериться автоматически
 ```
-
-## Roadmap
-
-- [ ] Веб-интерфейс
-- [ ] Gamification (streaks, achievements)
-- [ ] Адаптивная сложность
-- [ ] Экспорт в Anki (flashcards)
-- [ ] Голосовой ввод (speech-to-text)
-- [ ] Интеграция с другими LLM провайдерами
 
 ## Лицензия
 

@@ -1,7 +1,7 @@
 [project]
 name = "mindmastery"
 version = "0.1.0"
-description = "CLI application for developing mental calculation skills through task decomposition"
+description = "CLI приложение для развития навыков ментальных вычислений"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mindmastery = "cli:main"
+mindmastery = "mindmastery.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -27,4 +27,4 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
