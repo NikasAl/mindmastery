@@ -377,8 +377,8 @@ class MentalMasteryCLI:
         except ValueError:
             console.print("[red]Введите число[/red]")
 
-    def practice_skill(self, skill):
-        """Практика конкретного навыка."""
+    def practice_skill(self, skill, start_level_idx: int = 0):
+        """Практика конкретного навыка с автоматическим переходом на следующий уровень."""
         exercises = self.current_task.exercises.get(skill.id, [])
 
         if not exercises:
@@ -389,6 +389,8 @@ class MentalMasteryCLI:
         for ex in exercises:
             by_level.setdefault(ex.level, []).append(ex)
 
+        levels = list(by_level.keys())
+        
         console.print(f"\n[bold]{skill.name}[/bold]")
         console.print(f"[dim]{skill.description}[/dim]")
 
@@ -400,21 +402,85 @@ class MentalMasteryCLI:
         if skill.mnemonics:
             console.print(f"\n[bold]🧩 Мнемотехника:[/bold] {skill.mnemonics}")
 
-        levels = list(by_level.keys())
-        console.print("\n[bold]Выберите уровень сложности:[/bold]")
-        for i, level in enumerate(levels, 1):
-            console.print(f"  {i}. {level.value} ({len(by_level[level])} упражнений)")
+        # Start from specified level or let user choose
+        current_level_idx = start_level_idx
+        
+        while current_level_idx < len(levels):
+            level = levels[current_level_idx]
+            
+            console.print(f"\n[bold cyan]📍 Уровень: {level.value.upper()}[/bold cyan]")
+            console.print("\n[bold]Выберите действие:[/bold]")
+            console.print(f"  1. Начать уровень {level.value} ({len(by_level[level])} упражнений)")
+            if current_level_idx < len(levels) - 1:
+                console.print(f"  2. Пропустить и перейти к уровню {levels[current_level_idx + 1].value}")
+            console.print("  q. Вернуться к выбору навыка")
+            
+            choice = Prompt.ask("Выбор", default="1")
+            
+            if choice.lower() == 'q':
+                return
+            elif choice == "2" and current_level_idx < len(levels) - 1:
+                current_level_idx += 1
+                continue
+            elif choice == "1":
+                # Practice this level
+                completed = self.practice_exercises(by_level[level], skill)
+                
+                if not completed:  # User quit
+                    return
+                
+                # Show progress after level
+                self.show_skill_progress(skill)
+                
+                # Offer next level
+                if current_level_idx < len(levels) - 1:
+                    next_level = levels[current_level_idx + 1]
+                    if Confirm.ask(f"\n🎯 Перейти к уровню {next_level.value}?", default=True):
+                        current_level_idx += 1
+                    else:
+                        # Offer to practice another skill
+                        if Confirm.ask("Выбрать другой навык?", default=True):
+                            self.practice_task()
+                            return
+                        return
+                else:
+                    console.print("\n[green]🎉 Все уровни этого навыка пройдены![/green]")
+                    if Confirm.ask("Выбрать другой навык?", default=True):
+                        self.practice_task()
+                        return
+                    return
+            else:
+                console.print("[red]Неверный выбор[/red]")
+    
+    def show_skill_progress(self, skill):
+        """Показать прогресс по конкретному навыку."""
+        session = self.storage.load_session()
+        
+        if self.current_task_id not in session.tasks:
+            return
+        
+        task = session.tasks[self.current_task_id]
+        
+        if skill.id not in task.skill_progress:
+            return
+        
+        progress = task.skill_progress[skill.id]
+        
+        console.print(Panel(
+            f"[cyan]Навык:[/cyan] {skill.name}\n"
+            f"[cyan]Упражнений выполнено:[/cyan] {progress.exercises_completed}\n"
+            f"[cyan]Правильных ответов:[/cyan] {progress.exercises_correct}\n"
+            f"[cyan]Текущая серия:[/cyan] {progress.streak}\n"
+            f"[cyan]Уровень мастерства:[/cyan] {progress.mastery_score * 100:.0f}%",
+            title="📊 Прогресс навыка",
+            border_style="green"
+        ))
 
-        choice = Prompt.ask("Выберите уровень")
-        try:
-            level_idx = int(choice) - 1
-            if 0 <= level_idx < len(levels):
-                self.practice_exercises(by_level[levels[level_idx]], skill)
-        except ValueError:
-            console.print("[red]Неверный выбор[/red]")
-
-    def practice_exercises(self, exercises: list, skill):
-        """Пройти упражнения."""
+    def practice_exercises(self, exercises: list, skill) -> bool:
+        """Пройти упражнения. Возвращает True если все пройдены, False если выход через quit."""
+        # Ask about browser once at the start
+        open_in_browser = Confirm.ask("Открыть в браузере для лучшего рендеринга LaTeX?", default=False)
+        
         for i, ex in enumerate(exercises, 1):
             console.print(f"\n{'='*60}")
             console.print(f"[bold cyan]Упражнение {i}/{len(exercises)}[/bold cyan] [dim]({ex.level.value})[/dim]")
@@ -427,7 +493,7 @@ class MentalMasteryCLI:
                 border_style="cyan"
             ))
 
-            if Confirm.ask("Открыть в браузере для лучшего рендеринга LaTeX?", default=False):
+            if open_in_browser:
                 md_path = self.renderer.render_practice_session(
                     ex, skill.name, self.current_task_id
                 )
@@ -441,7 +507,7 @@ class MentalMasteryCLI:
                 )
 
                 if action == "quit":
-                    return
+                    return False
                 elif action == "skip":
                     self.show_answer(ex)
                     break
@@ -455,6 +521,8 @@ class MentalMasteryCLI:
                     user_answer = Prompt.ask("Ваш ответ")
                     self.check_answer(ex, user_answer)
                     break
+        
+        return True
 
     def show_answer(self, ex: Exercise):
         """Показать правильный ответ."""
