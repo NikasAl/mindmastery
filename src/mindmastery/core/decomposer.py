@@ -7,8 +7,8 @@ from typing import Optional
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from llm import LLMClient
-from models import (
+from ..llm import LLMClient
+from ..models import (
     TaskDecomposition,
     Skill,
     Exercise,

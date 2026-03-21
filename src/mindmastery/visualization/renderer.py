@@ -7,7 +7,7 @@ from typing import Optional
 from datetime import datetime
 from rich.console import Console
 
-from models import TaskDecomposition, Exercise, Difficulty
+from ..models import TaskDecomposition, Exercise, Difficulty
 
 console = Console()
 

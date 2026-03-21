@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 from rich.console import Console
 
-from models import Session, TaskProgress, UserProgress, TaskDecomposition
+from ..models import Session, TaskProgress, UserProgress, TaskDecomposition
 
 console = Console()
 
