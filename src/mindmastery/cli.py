@@ -102,9 +102,18 @@ class MentalMasteryCLI:
         table.add_row("1", "📝 Ввести новую задачу")
         table.add_row("2", "📚 Примеры задач")
         if not getattr(self, 'demo_mode', False):
-            table.add_row("3", "📊 Статистика прогресса")
-            table.add_row("4", "📂 Открыть папку вывода")
-            table.add_row("5", "⚙️ Настройки")
+            # Check for in-progress tasks
+            session = self.storage.load_session()
+            incomplete_count = sum(1 for t in session.tasks.values() if not t.completed and not t.can_solve_original)
+            if incomplete_count > 0:
+                table.add_row("3", f"▶️  Продолжить задачу ({incomplete_count} в процессе)")
+                table.add_row("4", "📊 Статистика прогресса")
+                table.add_row("5", "📂 Открыть папку вывода")
+                table.add_row("6", "⚙️ Настройки")
+            else:
+                table.add_row("3", "📊 Статистика прогресса")
+                table.add_row("4", "📂 Открыть папку вывода")
+                table.add_row("5", "⚙️ Настройки")
         else:
             table.add_row("3", "🎮 Примеры демо-режима")
         table.add_row("q", "🚪 Выход")
@@ -114,6 +123,12 @@ class MentalMasteryCLI:
 
         if getattr(self, 'demo_mode', False):
             return Prompt.ask("Выберите опцию", choices=["1", "2", "3", "q"], default="2")
+        
+        # Dynamic choices based on in-progress tasks
+        session = self.storage.load_session()
+        incomplete_count = sum(1 for t in session.tasks.values() if not t.completed and not t.can_solve_original)
+        if incomplete_count > 0:
+            return Prompt.ask("Выберите опцию", choices=["1", "2", "3", "4", "5", "6", "q"], default="1")
         return Prompt.ask("Выберите опцию", choices=["1", "2", "3", "4", "5", "q"], default="1")
 
     def get_example_tasks(self) -> dict:
@@ -226,9 +241,8 @@ class MentalMasteryCLI:
                 progress.add_task("Декомпозиция задачи и генерация упражнений...", total=None)
                 self.current_task = self.decomposer.decompose(task, task_type)
 
-            self.current_task_id = str(uuid.uuid4())[:8]
-
-            self.storage.add_task(self.current_task)
+            task_progress = self.storage.add_task(self.current_task)
+            self.current_task_id = task_progress.task_id
             self.show_decomposition_summary()
 
             md_path = self.renderer.render_task_decomposition(
@@ -516,6 +530,83 @@ class MentalMasteryCLI:
                 console.print(f"[yellow]Не удалось открыть: {e}[/yellow]")
                 console.print(f"Путь: {output_dir}")
 
+    def resume_task(self):
+        """Продолжить незавершенную задачу."""
+        session = self.storage.load_session()
+        
+        # Filter incomplete tasks
+        incomplete_tasks = [
+            (task_id, task) 
+            for task_id, task in session.tasks.items() 
+            if not task.completed and not task.can_solve_original
+        ]
+        
+        if not incomplete_tasks:
+            console.print("[yellow]Нет задач в процессе.[/yellow]")
+            return
+        
+        console.print("\n[bold cyan]▶️  Продолжить задачу[/bold cyan]")
+        
+        table = Table()
+        table.add_column("#", style="cyan", width=3)
+        table.add_column("Задача", style="green")
+        table.add_column("Прогресс", style="yellow")
+        table.add_column("Мастерство", style="magenta")
+        
+        for i, (task_id, task) in enumerate(incomplete_tasks, 1):
+            # Calculate progress
+            total_skills = len(task.skill_progress)
+            mastered_skills = sum(1 for p in task.skill_progress.values() if p.mastery_score >= 0.8)
+            
+            # Get task preview
+            task_preview = task.decomposition.original_task_plain[:50]
+            if len(task.decomposition.original_task_plain) > 50:
+                task_preview += "..."
+            
+            progress_str = f"{mastered_skills}/{total_skills} навыков"
+            
+            # Average mastery
+            if task.skill_progress:
+                avg_mastery = sum(p.mastery_score for p in task.skill_progress.values()) / len(task.skill_progress)
+                mastery_str = f"{avg_mastery*100:.0f}%"
+            else:
+                mastery_str = "0%"
+            
+            table.add_row(str(i), task_preview, progress_str, mastery_str)
+        
+        console.print(table)
+        
+        choice = Prompt.ask(
+            f"\nВыберите задачу (1-{len(incomplete_tasks)}) или 'c' для отмены",
+            default="1"
+        )
+        
+        if choice.lower() == 'c':
+            return
+        
+        try:
+            idx = int(choice) - 1
+            if 0 <= idx < len(incomplete_tasks):
+                task_id, task_progress = incomplete_tasks[idx]
+                
+                # Load the task
+                self.current_task = task_progress.decomposition
+                self.current_task_id = task_id
+                
+                console.print(f"\n[green]✓ Загружена задача: {task_id}[/green]")
+                
+                # Show summary
+                self.show_decomposition_summary()
+                
+                # Start practice
+                if Confirm.ask("\nНачать практику?", default=True):
+                    self.practice_task()
+            else:
+                console.print("[red]Неверный выбор[/red]")
+        except ValueError:
+            if choice.lower() != 'c':
+                console.print("[red]Введите число[/red]")
+
     def run(self):
         """Главный цикл приложения."""
         self.show_welcome()
@@ -524,6 +615,13 @@ class MentalMasteryCLI:
         while True:
             console.print()
             choice = self.show_main_menu()
+            
+            # Check if there are in-progress tasks to adjust menu handling
+            session = self.storage.load_session()
+            has_incomplete = any(
+                not t.completed and not t.can_solve_original 
+                for t in session.tasks.values()
+            )
 
             if choice == "q":
                 console.print("\n[cyan]Спасибо за использование MindMastery! 🧠[/cyan]\n")
@@ -544,11 +642,25 @@ class MentalMasteryCLI:
                 if getattr(self, 'demo_mode', False):
                     from .demo import run_demo
                     run_demo()
+                elif has_incomplete:
+                    # Option 3 is "Resume task" when there are incomplete tasks
+                    self.resume_task()
                 else:
                     self.show_progress()
             elif choice == "4":
-                self.open_output_directory()
+                if has_incomplete:
+                    # Option 4 is "Progress" when there are incomplete tasks
+                    self.show_progress()
+                else:
+                    self.open_output_directory()
             elif choice == "5":
+                if has_incomplete:
+                    # Option 5 is "Open output" when there are incomplete tasks
+                    self.open_output_directory()
+                else:
+                    self.show_settings()
+            elif choice == "6":
+                # Option 6 is "Settings" (only when there are incomplete tasks)
                 self.show_settings()
 
     def show_settings(self):
