@@ -15,7 +15,7 @@ class LLMClient:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "anthropic/claude-3.5-sonnet",
+        model: str = "google/gemini-2.5-pro-preview",
         base_url: str = "https://openrouter.ai/api/v1"
     ):
         self.model = model
