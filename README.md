@@ -39,15 +39,26 @@ pip install -e .
 
 ## Запуск
 
-### Демо-режим (без API ключа):
-```bash
-MENTAL_MASTERY_DEMO=1 mindmastery
-```
+### Способ 1: Через установленную команду (после pip install -e .)
 
-### Полный режим (с OpenRouter API):
 ```bash
+# Демо-режим (без API ключа)
+MENTAL_MASTERY_DEMO=1 mindmastery
+
+# С OpenRouter API
 export OPENROUTER_API_KEY='your-key-from-openrouter.ai'
 mindmastery
+```
+
+### Способ 2: Напрямую через Python
+
+```bash
+# Демо-режим
+MENTAL_MASTERY_DEMO=1 python mindmastery.py
+
+# С OpenRouter API
+export OPENROUTER_API_KEY='your-key-from-openrouter.ai'
+python mindmastery.py
 ```
 
 Получить API ключ: https://openrouter.ai/keys
@@ -56,21 +67,21 @@ mindmastery
 
 ```
 mindmastery/
-├── mental_mastery/
-│   ├── cli.py              # CLI интерфейс (Rich UI)
-│   ├── demo.py             # Демо-режим с примерами
-│   ├── core/
-│   │   └── decomposer.py   # Ядро декомпозиции задач
-│   ├── llm/
-│   │   ├── client.py       # OpenRouter клиент
-│   │   └── prompts.py      # Системные промпты
-│   ├── models/
-│   │   └── schemas.py      # Pydantic модели
-│   ├── visualization/
-│   │   └── renderer.py     # Markdown + LaTeX рендерер
-│   └── storage/
-│       └── progress.py     # Хранение прогресса
-├── pyproject.toml          # Python зависимости
+├── mindmastery.py        # Точка входа
+├── cli.py                # CLI интерфейс (Rich UI)
+├── demo.py               # Демо-режим с примерами
+├── core/
+│   └── decomposer.py     # Ядро декомпозиции задач
+├── llm/
+│   ├── client.py         # OpenRouter клиент
+│   └── prompts.py        # Системные промпты
+├── models/
+│   └── schemas.py        # Pydantic модели
+├── visualization/
+│   └── renderer.py       # Markdown + LaTeX рендерер
+├── storage/
+│   └── progress.py       # Хранение прогресса
+├── pyproject.toml        # Python зависимости
 └── README.md
 ```
 
@@ -109,9 +120,6 @@ $$\frac{(7 - 6,35) : 6,5 + 9,9}{\left(1,2 : 36 + 1,2 : 0,25 - 1\frac{5}{16}\righ
 3. Решение дробного уравнения (COMPUTATIONAL)
 4. Проверка ответа (STRATEGIC)
 
-### 3. Алгебраическое выражение
-$$\left( \frac{bx+4+\frac{4}{bx}}{2b+(b^2-4)x-2bx^2} + \frac{(4x^2-b^2)\frac{1}{b}}{(b+2x)^2-8bx} \right) \frac{bx}{2}$$
-
 ## Уровни упражнений
 
 1. **intro** — минимальная сложность, изолированный навык
@@ -130,18 +138,6 @@ $$\left( \frac{bx+4+\frac{4}{bx}}{2b+(b^2-4)x-2bx^2} + \frac{(4x^2-b^2)\frac{1}{
 
 # Откройте эту папку в Obsidian для просмотра
 # LaTeX формулы будут рендериться автоматически
-```
-
-## Архитектура промптов
-
-Система использует многоэтапный промпт:
-
-```
-1. SYSTEM PROMPT: Определяет роль (эксперт по когнитивной психологии)
-2. DECOMPOSITION PROMPT: Разбирает задачу на шаги
-3. SKILL IDENTIFICATION: Для каждого шага → навык
-4. EXERCISE GENERATION: Для каждого навыка → упражнения по уровням
-5. VERIFICATION: Проверка правильности ответов
 ```
 
 ## Roadmap
