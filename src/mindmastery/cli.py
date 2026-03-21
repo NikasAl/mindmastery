@@ -15,7 +15,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from .llm import LLMClient
 from .core import TaskDecomposer
-from .models import TaskDecomposition, Exercise, Difficulty
+from .models import TaskDecomposition, Exercise, Difficulty, UserProgress
 from .visualization import MarkdownRenderer
 from .storage import ProgressStorage
 
@@ -557,26 +557,138 @@ class MentalMasteryCLI:
         self.show_answer(ex)
 
     def show_progress(self):
-        """Показать статистику прогресса."""
+        """Показать детальную статистику прогресса с роадмапом."""
+        session = self.storage.load_session()
         stats = self.storage.get_stats()
 
-        table = Table(title="📊 Ваш прогресс")
-        table.add_column("Метрика", style="cyan")
-        table.add_column("Значение", style="green")
+        # Overall stats summary
+        console.print(Panel(
+            f"[cyan]Всего задач:[/cyan] {stats['total_tasks']}\n"
+            f"[cyan]Всего упражнений:[/cyan] {stats['total_exercises']}\n"
+            f"[cyan]Точность:[/cyan] {stats['accuracy']:.1f}%\n"
+            f"[cyan]Завершено задач:[/cyan] {stats['completed_tasks']}",
+            title="📊 Общая статистика",
+            border_style="cyan"
+        ))
 
-        table.add_row("Всего задач", str(stats["total_tasks"]))
-        table.add_row("Всего упражнений", str(stats["total_exercises"]))
-        table.add_row("Точность", f"{stats['accuracy']:.1f}%")
-        table.add_row("Завершено задач", str(stats["completed_tasks"]))
+        if not session.tasks:
+            console.print("\n[yellow]Нет задач для отображения.[/yellow]")
+            return
 
-        console.print(table)
-
-        session = self.storage.load_session()
-        if session.tasks:
-            console.print("\n[bold]Задачи в работе:[/bold]")
-            for task_id, task in session.tasks.items():
-                status = "✅ Готов к решению оригинала" if task.can_solve_original else "🔄 В процессе"
-                console.print(f"  {status} {task_id}: {len(task.skill_progress)} навыков")
+        # Detailed roadmap for each task
+        for task_id, task in session.tasks.items():
+            self._show_task_roadmap(task_id, task)
+    
+    def _show_task_roadmap(self, task_id: str, task):
+        """Показать детальный роадмап по задаче."""
+        decomposition = task.decomposition
+        
+        # Task header
+        status_icon = "✅" if task.can_solve_original else "🔄"
+        status_text = "ГОТОВ К РЕШЕНИЮ" if task.can_solve_original else "В ПРОЦЕССЕ"
+        
+        console.print(f"\n[bold cyan]{'═'*70}[/bold cyan]")
+        console.print(f"[bold]{status_icon} Задача {task_id}[/bold] [{status_text}]")
+        console.print(f"[dim]{decomposition.original_task_plain[:80]}{'...' if len(decomposition.original_task_plain) > 80 else ''}[/dim]")
+        console.print(f"[bold cyan]{'═'*70}[/bold cyan]")
+        
+        # Count mastered skills
+        mastered_count = sum(1 for p in task.skill_progress.values() if p.mastery_score >= 0.8)
+        total_skills = len(decomposition.skills)
+        
+        # Overall progress bar
+        progress_pct = mastered_count / total_skills if total_skills > 0 else 0
+        bar_width = 40
+        filled = int(bar_width * progress_pct)
+        empty = bar_width - filled
+        progress_bar = "█" * filled + "░" * empty
+        
+        console.print(f"\n[bold]Общий прогресс:[/bold] [{progress_bar}] {progress_pct*100:.0f}% ({mastered_count}/{total_skills} навыков)")
+        
+        # Get skill order from graph
+        skill_order = decomposition.skill_graph.get("order", [s.id for s in decomposition.skills])
+        
+        # Roadmap table
+        console.print(f"\n[bold]🗺️  РОАДМАП НАВЫКОВ:[/bold]\n")
+        
+        for i, skill_id in enumerate(skill_order, 1):
+            skill = next((s for s in decomposition.skills if s.id == skill_id), None)
+            if not skill:
+                continue
+            
+            progress = task.skill_progress.get(skill_id)
+            
+            # Determine status
+            if progress and progress.mastery_score >= 0.8:
+                status = "✅"
+                status_color = "green"
+            elif progress and progress.exercises_completed > 0:
+                status = "🔄"
+                status_color = "yellow"
+            else:
+                status = "⏳"
+                status_color = "dim"
+            
+            # Current position marker
+            current_marker = "▶️ " if progress and 0 < progress.mastery_score < 0.8 else "   "
+            
+            # Skill name with category
+            skill_name = f"{skill.name}"
+            category = f"[dim]({skill.category.value})[/dim]"
+            
+            # Exercises progress
+            total_ex = len(decomposition.exercises.get(skill_id, []))
+            completed_ex = progress.exercises_completed if progress else 0
+            correct_ex = progress.exercises_correct if progress else 0
+            
+            ex_progress = f"{completed_ex}/{total_ex} упр."
+            
+            # Mastery percentage
+            mastery_pct = progress.mastery_score * 100 if progress else 0
+            
+            # Mini progress bar for skill
+            mini_width = 10
+            mini_filled = int(mini_width * (mastery_pct / 100))
+            mini_empty = mini_width - mini_filled
+            mini_bar = f"[{'█'*mini_filled}{'░'*mini_empty}]"
+            
+            # Prerequisites check
+            prereqs = decomposition.skill_graph.get(skill_id, [])
+            prereq_ok = all(
+                task.skill_progress.get(p, UserProgress(skill_id=p)).mastery_score >= 0.8
+                for p in prereqs
+            ) if prereqs else True
+            
+            lock_icon = "🔒" if not prereq_ok and (not progress or progress.exercises_completed == 0) else ""
+            
+            # Print skill row
+            console.print(f"{current_marker}[{status_color}]{status}[/{status_color}] {i}. {skill_name} {category}")
+            console.print(f"      {ex_progress} | Мастерство: {mini_bar} {mastery_pct:.0f}% {lock_icon}")
+            
+            if progress and progress.streak > 0:
+                console.print(f"      [dim]🔥 Серия: {progress.streak}[/dim]")
+        
+        # Summary footer
+        console.print(f"\n[bold cyan]{'─'*70}[/bold cyan]")
+        
+        total_exercises = sum(len(ex) for ex in decomposition.exercises.values())
+        total_completed = sum(p.exercises_completed for p in task.skill_progress.values())
+        total_correct = sum(p.exercises_correct for p in task.skill_progress.values())
+        
+        console.print(
+            f"📊 Итого: {total_completed}/{total_exercises} упражнений | "
+            f"Точность: {total_correct/total_completed*100:.0f}%" if total_completed > 0 else "📊 Начните тренировку!"
+        )
+        
+        # Next recommended action
+        if not task.can_solve_original:
+            next_skill_id = task.get_next_skill()
+            if next_skill_id:
+                next_skill = next((s for s in decomposition.skills if s.id == next_skill_id), None)
+                if next_skill:
+                    console.print(f"\n[bold green]🎯 Рекомендуемый следующий навык: {next_skill.name}[/bold green]")
+        else:
+            console.print(f"\n[bold green]🎉 Поздравляем! Вы готовы решить оригинальную задачу![/bold green]")
 
     def open_output_directory(self):
         """Открыть папку вывода."""
