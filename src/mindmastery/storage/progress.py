@@ -184,3 +184,33 @@ class ProgressStorage:
                 1 for t in session.tasks.values() if t.can_solve_original
             ),
         }
+
+    def update_exercise(
+        self,
+        task_id: str,
+        exercise_id: str,
+        corrected_answer: str,
+        corrected_steps: List[str]
+    ) -> bool:
+        """Update an exercise with corrected answer and solution steps."""
+        session = self.load_session()
+        
+        if task_id not in session.tasks:
+            console.print(f"[red]Task {task_id} not found[/red]")
+            return False
+        
+        task = session.tasks[task_id]
+        
+        # Find and update the exercise
+        for skill_id, exercises in task.decomposition.exercises.items():
+            for i, ex in enumerate(exercises):
+                if ex.id == exercise_id:
+                    # Update the exercise
+                    ex.answer = corrected_answer
+                    ex.solution_steps = corrected_steps
+                    self.save_session()
+                    console.print(f"[green]✓ Упражнение {exercise_id} исправлено[/green]")
+                    return True
+        
+        console.print(f"[yellow]Упражнение {exercise_id} не найдено[/yellow]")
+        return False

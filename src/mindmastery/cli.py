@@ -615,7 +615,7 @@ class MentalMasteryCLI:
                 self.verify_exercise(ex)
 
     def verify_exercise(self, ex: Exercise):
-        """Верифицировать упражнение через LLM."""
+        """Верифицировать упражнение через LLM и сохранить исправления."""
         if not self.llm_client:
             console.print("[yellow]LLM клиент не инициализирован[/yellow]")
             return
@@ -640,16 +640,35 @@ class MentalMasteryCLI:
                     border_style="green"
                 ))
             else:
-                # Solution has errors
+                # Solution has errors - show and offer to fix
+                correct_answer = result.get("correct_answer", ex.answer)
+                correct_steps = result.get("correct_steps", result.get("your_solution", ex.solution_steps))
+                
                 console.print(Panel(
                     f"[red]✗ Обнаружена ошибка![/red]\n\n"
                     f"[yellow]Описание:[/yellow] {result.get('error_description', 'Не указано')}\n\n"
-                    f"[green]Правильный ответ:[/green] {result.get('correct_answer', ex.answer)}\n\n"
+                    f"[green]Правильный ответ:[/green] {correct_answer}\n\n"
                     + "[bold]Правильное решение:[/bold]\n"
-                    + "\n".join(f"  {i+1}. {s}" for i, s in enumerate(result.get("correct_steps", result.get("your_solution", [])))),
+                    + "\n".join(f"  {i+1}. {s}" for i, s in enumerate(correct_steps)),
                     title="🔍 Результат верификации",
                     border_style="red"
                 ))
+                
+                # Offer to save the correction
+                if Confirm.ask("\n💾 Сохранить исправление в базе?", default=True):
+                    # Update in storage
+                    self.storage.update_exercise(
+                        self.current_task_id,
+                        ex.id,
+                        correct_answer,
+                        correct_steps
+                    )
+                    
+                    # Also update in current_task
+                    ex.answer = correct_answer
+                    ex.solution_steps = correct_steps
+                    
+                    console.print("[green]✓ Упражнение исправлено и сохранено![/green]")
                 
         except Exception as e:
             console.print(f"[red]Ошибка верификации: {e}[/red]")
