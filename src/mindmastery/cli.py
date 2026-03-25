@@ -13,7 +13,7 @@ from rich.table import Table
 from rich.prompt import Prompt, Confirm
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from .llm import LLMClient
+from .llm import LLMClient, select_model
 from .core import TaskDecomposer
 from .models import TaskDecomposition, Exercise, Difficulty, UserProgress
 from .visualization import MarkdownRenderer
@@ -62,9 +62,13 @@ class MentalMasteryCLI:
             return
 
         try:
-            self.llm_client = LLMClient(api_key=api_key)
+            # Select model
+            console.print()
+            model = select_model()
+            
+            self.llm_client = LLMClient(api_key=api_key, model=model)
             self.decomposer = TaskDecomposer(self.llm_client)
-            console.print("[green]✓ LLM клиент инициализирован[/green]")
+            console.print(f"[green]✓ LLM клиент инициализирован[/green] (модель: {model})")
         except Exception as e:
             console.print(f"[red]Ошибка инициализации LLM клиента: {e}[/red]")
             sys.exit(1)
@@ -358,11 +362,21 @@ class MentalMasteryCLI:
             return
 
         console.print("\n[bold cyan]🎯 Режим практики[/bold cyan]")
+        console.print("[dim]Упражнения генерируются по требованию для экономии токенов[/dim]")
         console.print("Выберите навык для тренировки:")
 
         for i, skill in enumerate(self.current_task.skills, 1):
-            ex_count = len(self.current_task.exercises.get(skill.id, []))
-            console.print(f"  {i}. {skill.name} ({ex_count} упражнений)")
+            # Check if exercises are cached
+            cached_ex = self.storage.get_exercises_for_skill(self.current_task_id, skill.id)
+            if cached_ex:
+                ex_count = len(cached_ex)
+                status = "✅"
+            else:
+                # Check in current task
+                ex_count = len(self.current_task.exercises.get(skill.id, []))
+                status = "✅" if ex_count > 0 else "⚡"
+            
+            console.print(f"  {i}. {status} {skill.name} ({ex_count} упр.)" if ex_count > 0 else f"  {i}. {status} {skill.name} (генерация...)")
 
         choice = Prompt.ask("Выберите номер навыка (или 'q' для выхода)")
         if choice.lower() == 'q':
@@ -379,11 +393,50 @@ class MentalMasteryCLI:
 
     def practice_skill(self, skill, start_level_idx: int = 0):
         """Практика конкретного навыка с автоматическим переходом на следующий уровень."""
+        
+        # Check if exercises exist (lazy generation)
         exercises = self.current_task.exercises.get(skill.id, [])
-
+        
         if not exercises:
-            console.print(f"[yellow]Нет упражнений для {skill.name}[/yellow]")
-            return
+            # Try to load from storage cache
+            exercises = self.storage.get_exercises_for_skill(self.current_task_id, skill.id)
+            
+        if not exercises:
+            # Need to generate exercises on-demand
+            console.print(f"\n[yellow]⚡ Генерация упражнений для: {skill.name}...[/yellow]")
+            
+            if getattr(self, 'demo_mode', False):
+                # Use demo exercises
+                from .demo import generate_demo_exercises
+                ex_data = generate_demo_exercises(skill.id)
+                from .models import Exercise, Difficulty
+                exercises = [
+                    Exercise(
+                        id=f"ex_{skill.id}_{i}",
+                        skill_id=skill.id,
+                        level=Difficulty(ex.get("level", "intro")),
+                        question=ex["question"],
+                        question_plain=ex["question_plain"],
+                        answer=ex["answer"],
+                        solution_steps=[ex["answer"]],
+                        hints=[],
+                        time_estimate=30,
+                        cognitive_load=3
+                    )
+                    for i, ex in enumerate(ex_data)
+                ]
+            else:
+                # Generate via LLM
+                exercises = self.decomposer.generate_exercises_for_skill(skill, self.current_task)
+            
+            # Cache the exercises
+            if exercises:
+                self.storage.store_exercises_for_skill(self.current_task_id, skill.id, exercises)
+                # Also update current_task
+                self.current_task.exercises[skill.id] = exercises
+            else:
+                console.print(f"[red]Не удалось сгенерировать упражнения для {skill.name}[/red]")
+                return
 
         by_level = {}
         for ex in exercises:

@@ -67,7 +67,7 @@ class TaskDecomposer:
         self,
         task: str,
         task_type: str = "math",
-        generate_exercises: bool = True
+        generate_exercises: bool = False  # Changed default to False
     ) -> TaskDecomposition:
         """Decompose a task into skills and optionally generate exercises."""
 
@@ -83,7 +83,7 @@ class TaskDecomposer:
             console=console,
         ) as progress:
 
-            # Step 1: Decompose task
+            # Step 1: Decompose task into skills only
             task_id = progress.add_task("Decomposing task into skills...", total=None)
             decomposition_data = self.llm.decompose_task(task, task_type)
             progress.remove_task(task_id)
@@ -107,43 +107,16 @@ class TaskDecomposer:
                 except Exception as e:
                     console.print(f"[yellow]Warning: Could not parse skill: {e}[/yellow]")
 
-            # Step 2: Generate exercises for each skill
+            # Step 2: Generate exercises for each skill (only if requested)
             exercises = {}
             if generate_exercises:
                 for skill in skills:
-                    task_id = progress.add_task(
-                        f"Generating exercises for: {skill.name}...",
-                        total=None
+                    skill_exercises = self._generate_exercises_for_skill(
+                        skill, 
+                        str(decomposition_data.get("full_solution", [])),
+                        progress
                     )
-                    try:
-                        ex_data = self.llm.generate_exercises(
-                            skill.model_dump(),
-                            str(decomposition_data.get("full_solution", [])),
-                            skill.id
-                        )
-                        skill_exercises = []
-                        for ex in ex_data.get("exercises", []):
-                            try:
-                                exercise = Exercise(
-                                    id=ex.get("id", str(uuid.uuid4())),
-                                    skill_id=skill.id,
-                                    level=Difficulty(ex.get("level", "intro")),
-                                    question=ex["question"],
-                                    question_plain=ex["question_plain"],
-                                    answer=ex["answer"],
-                                    solution_steps=ex.get("solution_steps", []),
-                                    hints=ex.get("hints", []),
-                                    time_estimate=ex.get("time_estimate", 30),
-                                    cognitive_load=ex.get("cognitive_load", 5),
-                                )
-                                skill_exercises.append(exercise)
-                            except Exception as e:
-                                console.print(f"[yellow]Warning: Could not parse exercise: {e}[/yellow]")
-                        exercises[skill.id] = skill_exercises
-                    except Exception as e:
-                        console.print(f"[red]Error generating exercises for {skill.id}: {e}[/red]")
-                        exercises[skill.id] = []
-                    progress.remove_task(task_id)
+                    exercises[skill.id] = skill_exercises
 
             # Create decomposition object
             decomposition = TaskDecomposition(
@@ -156,13 +129,71 @@ class TaskDecomposer:
                 estimated_total_time=sum(
                     sum(ex.time_estimate for ex in exs)
                     for exs in exercises.values()
-                ) // 60,  # Convert to minutes
+                ) // 60 if exercises else 15,  # Default 15 min estimate
             )
 
             # Save to cache
             self._save_cache(task, decomposition)
 
             return decomposition
+
+    def _generate_exercises_for_skill(
+        self, 
+        skill: Skill, 
+        context: str,
+        progress=None
+    ) -> list[Exercise]:
+        """Generate exercises for a single skill."""
+        if progress:
+            task_id = progress.add_task(
+                f"Generating exercises for: {skill.name}...",
+                total=None
+            )
+        
+        try:
+            ex_data = self.llm.generate_exercises(
+                skill.model_dump(),
+                context,
+                skill.id
+            )
+            skill_exercises = []
+            for ex in ex_data.get("exercises", []):
+                try:
+                    exercise = Exercise(
+                        id=ex.get("id", str(uuid.uuid4())),
+                        skill_id=skill.id,
+                        level=Difficulty(ex.get("level", "intro")),
+                        question=ex["question"],
+                        question_plain=ex["question_plain"],
+                        answer=ex["answer"],
+                        solution_steps=ex.get("solution_steps", []),
+                        hints=ex.get("hints", []),
+                        time_estimate=ex.get("time_estimate", 30),
+                        cognitive_load=ex.get("cognitive_load", 5),
+                    )
+                    skill_exercises.append(exercise)
+                except Exception as e:
+                    console.print(f"[yellow]Warning: Could not parse exercise: {e}[/yellow]")
+            
+            if progress:
+                progress.remove_task(task_id)
+            
+            return skill_exercises
+            
+        except Exception as e:
+            console.print(f"[red]Error generating exercises for {skill.name}: {e}[/red]")
+            if progress:
+                progress.remove_task(task_id)
+            return []
+
+    def generate_exercises_for_skill(
+        self,
+        skill: Skill,
+        decomposition: TaskDecomposition
+    ) -> list[Exercise]:
+        """Public method to generate exercises for a skill on-demand."""
+        context = str(decomposition.full_solution)
+        return self._generate_exercises_for_skill(skill, context)
 
     def verify_exercise(self, exercise: Exercise, user_answer: str) -> dict:
         """Verify user's answer to an exercise."""

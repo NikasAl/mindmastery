@@ -1,6 +1,6 @@
 """LLM module for MindMastery."""
 
-from .client import LLMClient
+from .client import LLMClient, select_model, AVAILABLE_MODELS, DEFAULT_MODEL
 from .prompts import (
     DECOMPOSITION_SYSTEM_PROMPT,
     DECOMPOSITION_PROMPT,
@@ -12,6 +12,9 @@ from .prompts import (
 
 __all__ = [
     "LLMClient",
+    "select_model",
+    "AVAILABLE_MODELS",
+    "DEFAULT_MODEL",
     "DECOMPOSITION_SYSTEM_PROMPT",
     "DECOMPOSITION_PROMPT",
     "EXERCISE_GENERATION_PROMPT",

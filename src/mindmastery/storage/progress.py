@@ -3,10 +3,10 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 from rich.console import Console
 
-from ..models import Session, TaskProgress, UserProgress, TaskDecomposition
+from ..models import Session, TaskProgress, UserProgress, TaskDecomposition, Exercise
 
 console = Console()
 
@@ -76,6 +76,57 @@ class ProgressStorage:
         self.save_session()
 
         return task_progress
+
+    def has_exercises_for_skill(self, task_id: str, skill_id: str) -> bool:
+        """Check if exercises exist for a skill."""
+        session = self.load_session()
+        
+        if task_id not in session.tasks:
+            return False
+        
+        task = session.tasks[task_id]
+        exercises = task.decomposition.exercises.get(skill_id, [])
+        return len(exercises) > 0
+
+    def store_exercises_for_skill(
+        self, 
+        task_id: str, 
+        skill_id: str, 
+        exercises: List[Exercise]
+    ):
+        """Store generated exercises for a skill."""
+        session = self.load_session()
+        
+        if task_id not in session.tasks:
+            console.print(f"[red]Task {task_id} not found[/red]")
+            return
+        
+        task = session.tasks[task_id]
+        task.decomposition.exercises[skill_id] = exercises
+        
+        # Recalculate estimated time
+        total_time = sum(
+            sum(ex.time_estimate for ex in exs)
+            for exs in task.decomposition.exercises.values()
+        ) // 60
+        task.decomposition.estimated_total_time = total_time if total_time > 0 else 15
+        
+        self.save_session()
+        console.print(f"[green]✓ Exercises cached for skill {skill_id}[/green]")
+
+    def get_exercises_for_skill(
+        self, 
+        task_id: str, 
+        skill_id: str
+    ) -> List[Exercise]:
+        """Get exercises for a skill (may be empty if not generated yet)."""
+        session = self.load_session()
+        
+        if task_id not in session.tasks:
+            return []
+        
+        task = session.tasks[task_id]
+        return task.decomposition.exercises.get(skill_id, [])
 
     def update_progress(
         self,
