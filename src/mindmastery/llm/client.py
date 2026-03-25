@@ -163,3 +163,17 @@ class LLMClient:
             answer=answer
         )
         return self.complete_json(DECOMPOSITION_SYSTEM_PROMPT, user_prompt)
+
+    def verify_exercise(self, exercise: dict) -> dict:
+        """Verify that exercise solution is correct. Used for checking generated exercises."""
+        from .prompts import EXERCISE_VERIFICATION_PROMPT
+
+        user_prompt = EXERCISE_VERIFICATION_PROMPT.format(
+            exercise=json.dumps(exercise, ensure_ascii=False, indent=2)
+        )
+        # Use lower temperature for verification (more deterministic)
+        return self.complete_json(
+            "Ты — математический проверяющий. Отвечай только в JSON формате.",
+            user_prompt,
+            temperature=0.1
+        )

@@ -6,6 +6,7 @@ from .prompts import (
     DECOMPOSITION_PROMPT,
     EXERCISE_GENERATION_PROMPT,
     VERIFICATION_PROMPT,
+    EXERCISE_VERIFICATION_PROMPT,
     get_decomposition_prompt,
     get_exercise_prompt,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "DECOMPOSITION_PROMPT",
     "EXERCISE_GENERATION_PROMPT",
     "VERIFICATION_PROMPT",
+    "EXERCISE_VERIFICATION_PROMPT",
     "get_decomposition_prompt",
     "get_exercise_prompt",
 ]

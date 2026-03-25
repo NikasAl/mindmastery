@@ -608,6 +608,51 @@ class MentalMasteryCLI:
             )
 
         self.show_answer(ex)
+        
+        # Offer verification for potentially wrong solutions
+        if not getattr(self, 'demo_mode', False):
+            if Confirm.ask("\n🔍 Проверить решение через LLM?", default=False):
+                self.verify_exercise(ex)
+
+    def verify_exercise(self, ex: Exercise):
+        """Верифицировать упражнение через LLM."""
+        if not self.llm_client:
+            console.print("[yellow]LLM клиент не инициализирован[/yellow]")
+            return
+        
+        console.print("\n[yellow]⏳ Проверка решения...[/yellow]")
+        
+        try:
+            exercise_dict = {
+                "question": ex.question,
+                "question_plain": ex.question_plain,
+                "answer": ex.answer,
+                "solution_steps": ex.solution_steps
+            }
+            
+            result = self.llm_client.verify_exercise(exercise_dict)
+            
+            if result.get("is_correct"):
+                console.print(Panel(
+                    "[green]✓ Решение верно![/green]\n\n"
+                    + "\n".join(f"  {i+1}. {s}" for i, s in enumerate(result.get("your_solution", ex.solution_steps))),
+                    title="✅ Верификация",
+                    border_style="green"
+                ))
+            else:
+                # Solution has errors
+                console.print(Panel(
+                    f"[red]✗ Обнаружена ошибка![/red]\n\n"
+                    f"[yellow]Описание:[/yellow] {result.get('error_description', 'Не указано')}\n\n"
+                    f"[green]Правильный ответ:[/green] {result.get('correct_answer', ex.answer)}\n\n"
+                    + "[bold]Правильное решение:[/bold]\n"
+                    + "\n".join(f"  {i+1}. {s}" for i, s in enumerate(result.get("correct_steps", result.get("your_solution", [])))),
+                    title="🔍 Результат верификации",
+                    border_style="red"
+                ))
+                
+        except Exception as e:
+            console.print(f"[red]Ошибка верификации: {e}[/red]")
 
     def show_progress(self):
         """Показать детальную статистику прогресса с роадмапом."""
